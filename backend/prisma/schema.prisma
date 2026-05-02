@@ -1,0 +1,37 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Usuario {
+  id        String   @id @default(uuid())
+  nome      String
+  email     String   @unique
+  senha     String
+  criadoEm  DateTime @default(now())
+
+  transacoes Transacao[]
+}
+
+model Transacao {
+  id         String   @id @default(uuid())
+  descricao  String
+  valor      Decimal  @db.Decimal(10,2)
+  tipo       TipoTransacao
+  categoria  String?
+  data       DateTime @default(now())
+
+  usuarioId  String
+  usuario    Usuario @relation(fields: [usuarioId], references: [id])
+
+  criadoEm   DateTime @default(now())
+}
+
+enum TipoTransacao {
+  RECEITA
+  DESPESA
+}
