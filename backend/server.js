@@ -10,10 +10,6 @@ const authRoutes = require("./routes/auth.routes");
 const transacaoRoutes = require("./routes/transacao.routes");
 const { apiLimiter } = require("./middlewares/rateLimit.middleware");
 const { errorHandler } = require("./middlewares/error.middleware");
-
-// Valida as variáveis de ambiente antes de qualquer outra coisa.
-// Se algo essencial faltar (ex: JWT_SECRET), o processo para aqui
-// com uma mensagem clara, em vez de falhar de forma confusa depois.
 const env = loadEnv();
 
 const app = express();

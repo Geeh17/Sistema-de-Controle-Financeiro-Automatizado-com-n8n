@@ -1,7 +1,13 @@
 const { ZodError } = require("zod");
 const { Prisma } = require("@prisma/client");
 const { AppError } = require("../utils/AppError");
-function errorHandler(err, req, res, next) {
+
+/**
+ * Middleware final da cadeia — captura qualquer erro lançado (ou
+ * encaminhado via next(err)) e devolve uma resposta JSON consistente.
+ * Deve ser registrado por último em server.js, depois de todas as rotas.
+ */
+function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-vars
   // Erros de validação (Zod)
   if (err instanceof ZodError) {
     return res.status(400).json({
@@ -16,9 +22,7 @@ function errorHandler(err, req, res, next) {
   // Erros conhecidos do Prisma (ex: violação de unique constraint)
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === "P2002") {
-      return res
-        .status(409)
-        .json({ error: "Registro já existe (violação de unicidade)." });
+      return res.status(409).json({ error: "Registro já existe (violação de unicidade)." });
     }
     if (err.code === "P2025") {
       return res.status(404).json({ error: "Registro não encontrado." });
@@ -31,7 +35,7 @@ function errorHandler(err, req, res, next) {
   }
 
   // Qualquer outro erro não previsto
-  console.error("Erro não tratado:", err);
+  console.error("💥 Erro não tratado:", err);
   return res.status(500).json({ error: "Erro interno do servidor." });
 }
 

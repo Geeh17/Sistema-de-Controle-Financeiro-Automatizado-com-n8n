@@ -17,6 +17,7 @@ export default function DashboardPage() {
   const [saldo, setSaldo] = useState<Saldo | null>(null);
   const [resumo, setResumo] = useState<ResumoMensal | null>(null);
   const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState("");
 
   const agora = new Date();
   const mes = agora.getMonth() + 1;
@@ -24,6 +25,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function carregar() {
+      setErro("");
       try {
         const [resSaldo, resResumo] = await Promise.all([
           api.get("/transacoes/saldo"),
@@ -31,8 +33,8 @@ export default function DashboardPage() {
         ]);
         setSaldo(resSaldo.data);
         setResumo(resResumo.data);
-      } catch (e) {
-        console.error(e);
+      } catch (e: any) {
+        setErro(e.response?.data?.error || "Erro ao carregar dados do dashboard.");
       } finally {
         setLoading(false);
       }
@@ -72,6 +74,12 @@ export default function DashboardPage() {
             {nomeMes(mes)} {ano}
           </h1>
         </div>
+
+        {erro && (
+          <div className="bg-danger/10 border border-danger/30 text-danger text-sm rounded-lg px-4 py-3">
+            {erro}
+          </div>
+        )}
 
         {/* Métricas */}
         <div className="grid grid-cols-3 gap-4">

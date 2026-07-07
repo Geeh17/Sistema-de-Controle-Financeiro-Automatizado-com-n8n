@@ -17,6 +17,18 @@ export interface Transacao {
   criadoEm: string;
 }
 
+export interface Paginacao {
+  pagina: number;
+  limite: number;
+  total: number;
+  totalPaginas: number;
+}
+
+export interface TransacoesPaginadas {
+  dados: Transacao[];
+  paginacao: Paginacao;
+}
+
 export interface Saldo {
   saldo: number;
   totalReceitas: number;

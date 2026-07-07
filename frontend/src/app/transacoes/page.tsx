@@ -1,31 +1,39 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
 import TransacaoModal from "@/components/ui/TransacaoModal";
 import { useAuth } from "@/hooks/useAuth";
 import api from "@/lib/api";
-import { Transacao } from "@/types";
+import { Transacao, Paginacao } from "@/types";
 import { formatarMoeda, formatarData } from "@/lib/utils";
 
 export default function TransacoesPage() {
   const { usuario } = useAuth();
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
+  const [paginacao, setPaginacao] = useState<Paginacao | null>(null);
+  const [pagina, setPagina] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState("");
   const [modalAberto, setModalAberto] = useState(false);
   const [editando, setEditando] = useState<Transacao | null>(null);
   const [busca, setBusca] = useState("");
   const [filtroTipo, setFiltroTipo] = useState("");
 
   async function carregar() {
+    setLoading(true);
+    setErro("");
     try {
       const params = new URLSearchParams();
       if (filtroTipo) params.set("tipo", filtroTipo);
+      params.set("pagina", String(pagina));
+      params.set("limite", "20");
       const res = await api.get(`/transacoes?${params}`);
-      setTransacoes(res.data);
-    } catch (e) {
-      console.error(e);
+      setTransacoes(res.data.dados);
+      setPaginacao(res.data.paginacao);
+    } catch (e: any) {
+      setErro(e.response?.data?.error || "Erro ao carregar transações.");
     } finally {
       setLoading(false);
     }
@@ -33,12 +41,22 @@ export default function TransacoesPage() {
 
   useEffect(() => {
     if (usuario) carregar();
-  }, [usuario, filtroTipo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usuario, filtroTipo, pagina]);
+
+  // Volta pra primeira página sempre que o filtro de tipo muda
+  useEffect(() => {
+    setPagina(1);
+  }, [filtroTipo]);
 
   async function deletar(id: string) {
     if (!confirm("Remover esta transação?")) return;
-    await api.delete(`/transacoes/${id}`);
-    carregar();
+    try {
+      await api.delete(`/transacoes/${id}`);
+      carregar();
+    } catch (e: any) {
+      setErro(e.response?.data?.error || "Erro ao remover transação.");
+    }
   }
 
   function abrirEditar(t: Transacao) {
@@ -51,6 +69,7 @@ export default function TransacoesPage() {
     setEditando(null);
   }
 
+  // Busca por texto é aplicada só na página atual (filtro client-side)
   const filtradas = transacoes.filter((t) =>
     t.descricao.toLowerCase().includes(busca.toLowerCase()) ||
     (t.categoria ?? "").toLowerCase().includes(busca.toLowerCase())
@@ -63,7 +82,9 @@ export default function TransacoesPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Transações</h1>
-            <p className="text-subtle text-sm mt-0.5">{transacoes.length} registro(s)</p>
+            <p className="text-subtle text-sm mt-0.5">
+              {paginacao?.total ?? 0} registro(s)
+            </p>
           </div>
           <button
             onClick={() => setModalAberto(true)}
@@ -81,7 +102,7 @@ export default function TransacoesPage() {
             <input
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar por descrição ou categoria..."
+              placeholder="Buscar por descrição ou categoria (nesta página)..."
               className="input pl-9"
             />
           </div>
@@ -95,6 +116,12 @@ export default function TransacoesPage() {
             <option value="DESPESA">Despesas</option>
           </select>
         </div>
+
+        {erro && (
+          <div className="bg-danger/10 border border-danger/30 text-danger text-sm rounded-lg px-4 py-3">
+            {erro}
+          </div>
+        )}
 
         {/* Tabela */}
         <div className="card p-0 overflow-hidden">
@@ -120,7 +147,7 @@ export default function TransacoesPage() {
                   <td colSpan={6} className="px-6 py-10 text-center text-subtle">Nenhuma transação encontrada</td>
                 </tr>
               )}
-              {filtradas.map((t) => (
+              {!loading && filtradas.map((t) => (
                 <tr key={t.id} className="border-b border-border last:border-0 hover:bg-white/[0.02] transition-colors">
                   <td className="px-6 py-4 text-text">{t.descricao}</td>
                   <td className="px-6 py-4 text-subtle">{t.categoria ?? "—"}</td>
@@ -160,6 +187,33 @@ export default function TransacoesPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Paginação */}
+        {paginacao && paginacao.totalPaginas > 1 && (
+          <div className="flex items-center justify-between text-sm">
+            <p className="text-subtle">
+              Página {paginacao.pagina} de {paginacao.totalPaginas}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPagina((p) => Math.max(1, p - 1))}
+                disabled={pagina <= 1}
+                className="btn-ghost flex items-center gap-1 px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft size={14} />
+                Anterior
+              </button>
+              <button
+                onClick={() => setPagina((p) => Math.min(paginacao.totalPaginas, p + 1))}
+                disabled={pagina >= paginacao.totalPaginas}
+                className="btn-ghost flex items-center gap-1 px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Próxima
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {modalAberto && (

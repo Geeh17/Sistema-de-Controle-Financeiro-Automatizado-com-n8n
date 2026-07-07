@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -25,6 +25,7 @@ interface Props {
 }
 
 export default function TransacaoModal({ transacao, onClose, onSalvo }: Props) {
+  const [erro, setErro] = useState("");
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { tipo: "DESPESA" },
@@ -43,6 +44,7 @@ export default function TransacaoModal({ transacao, onClose, onSalvo }: Props) {
   }, [transacao, reset]);
 
   async function onSubmit(data: FormData) {
+    setErro("");
     try {
       if (transacao) {
         await api.put(`/transacoes/${transacao.id}`, data);
@@ -51,8 +53,8 @@ export default function TransacaoModal({ transacao, onClose, onSalvo }: Props) {
       }
       onSalvo();
       onClose();
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setErro(e.response?.data?.error || "Erro ao salvar transação. Tente novamente.");
     }
   }
 
@@ -99,6 +101,10 @@ export default function TransacaoModal({ transacao, onClose, onSalvo }: Props) {
             <label className="block text-sm text-subtle mb-1.5">Data</label>
             <input {...register("data")} type="date" className="input" />
           </div>
+
+          {erro && (
+            <p className="text-danger text-sm text-center">{erro}</p>
+          )}
 
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="btn-ghost flex-1">
