@@ -1,0 +1,5 @@
+descricao,valor,tipo,categoria,data
+Salário,5000.00,RECEITA,Trabalho,2026-07-01
+Supermercado,320.50,DESPESA,Alimentação,2026-07-02
+Aluguel,1500.00,DESPESA,Moradia,2026-07-05
+Freelance,800.00,RECEITA,Trabalho,2026-07-10

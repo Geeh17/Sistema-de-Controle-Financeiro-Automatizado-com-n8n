@@ -1,0 +1,177 @@
+{
+  "name": "Finance AI - Alerta de Saldo Baixo",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "8f1b1a10-0001-4a1a-9a10-000000000001",
+      "name": "Agendamento Diário",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "api_url",
+              "type": "string",
+              "value": "http://localhost:3000"
+            },
+            {
+              "id": "a2",
+              "name": "email_login",
+              "type": "string",
+              "value": "voce@teste.com"
+            },
+            {
+              "id": "a3",
+              "name": "senha_login",
+              "type": "string",
+              "value": "COLOQUE_A_SENHA_AQUI"
+            },
+            {
+              "id": "a4",
+              "name": "limite_alerta",
+              "type": "number",
+              "value": 100
+            },
+            {
+              "id": "a5",
+              "name": "email_destino",
+              "type": "string",
+              "value": "voce@teste.com"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8f1b1a10-0002-4a1a-9a10-000000000002",
+      "name": "Configuração",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.api_url }}/auth/login",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ email: $json.email_login, senha: $json.senha_login }) }}",
+        "options": {}
+      },
+      "id": "8f1b1a10-0003-4a1a-9a10-000000000003",
+      "name": "Login",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $node[\"Configuração\"].json.api_url }}/transacoes/saldo",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8f1b1a10-0004-4a1a-9a10-000000000004",
+      "name": "Buscar Saldo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.saldo }}",
+              "rightValue": "={{ $node[\"Configuração\"].json.limite_alerta }}",
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8f1b1a10-0005-4a1a-9a10-000000000005",
+      "name": "Saldo Abaixo do Limite?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $node[\"Configuração\"].json.email_destino }}",
+        "toEmail": "={{ $node[\"Configuração\"].json.email_destino }}",
+        "subject": "⚠️ Alerta: saldo abaixo do limite",
+        "emailFormat": "text",
+        "text": "=Seu saldo atual é R$ {{ $json.saldo.toFixed(2) }}, abaixo do limite de alerta configurado (R$ {{ $node[\"Configuração\"].json.limite_alerta }}).\n\nReceitas do mês: R$ {{ $json.totalReceitas.toFixed(2) }}\nDespesas do mês: R$ {{ $json.totalDespesas.toFixed(2) }}",
+        "options": {}
+      },
+      "id": "8f1b1a10-0006-4a1a-9a10-000000000006",
+      "name": "Enviar Email de Alerta",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1100, -80],
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE_WITH_YOUR_SMTP_CREDENTIAL_ID",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Agendamento Diário": {
+      "main": [[{ "node": "Configuração", "type": "main", "index": 0 }]]
+    },
+    "Configuração": {
+      "main": [[{ "node": "Login", "type": "main", "index": 0 }]]
+    },
+    "Login": {
+      "main": [[{ "node": "Buscar Saldo", "type": "main", "index": 0 }]]
+    },
+    "Buscar Saldo": {
+      "main": [[{ "node": "Saldo Abaixo do Limite?", "type": "main", "index": 0 }]]
+    },
+    "Saldo Abaixo do Limite?": {
+      "main": [
+        [{ "node": "Enviar Email de Alerta", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

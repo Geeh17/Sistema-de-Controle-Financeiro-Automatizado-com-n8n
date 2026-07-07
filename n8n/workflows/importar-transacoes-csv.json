@@ -1,0 +1,185 @@
+{
+  "name": "Finance AI - Importar Transações (CSV)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "9f2c2b20-0001-4b2b-9b20-000000000001",
+      "name": "Executar Manualmente",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "api_url",
+              "type": "string",
+              "value": "http://localhost:3000"
+            },
+            {
+              "id": "b2",
+              "name": "email_login",
+              "type": "string",
+              "value": "voce@teste.com"
+            },
+            {
+              "id": "b3",
+              "name": "senha_login",
+              "type": "string",
+              "value": "COLOQUE_A_SENHA_AQUI"
+            },
+            {
+              "id": "b4",
+              "name": "caminho_csv",
+              "type": "string",
+              "value": "/caminho/completo/para/transacoes.csv"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9f2c2b20-0002-4b2b-9b20-000000000002",
+      "name": "Configuração",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.api_url }}/auth/login",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ email: $json.email_login, senha: $json.senha_login }) }}",
+        "options": {}
+      },
+      "id": "9f2c2b20-0003-4b2b-9b20-000000000003",
+      "name": "Login",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "filePath": "={{ $node[\"Configuração\"].json.caminho_csv }}",
+        "dataPropertyName": "data"
+      },
+      "id": "9f2c2b20-0004-4b2b-9b20-000000000004",
+      "name": "Ler Arquivo CSV",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "operation": "fromFile",
+        "binaryPropertyName": "data",
+        "options": {
+          "fileFormat": "csv"
+        }
+      },
+      "id": "9f2c2b20-0005-4b2b-9b20-000000000005",
+      "name": "Converter CSV em Linhas",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normaliza e valida cada linha do CSV antes de enviar para a API.\n// Formato esperado do CSV (com cabeçalho):\n// descricao,valor,tipo,categoria,data\n// Ex: Supermercado,150.50,DESPESA,Alimentação,2026-07-01\n\nconst saida = [];\n\nfor (const item of $input.all()) {\n  const linha = item.json;\n\n  const descricao = String(linha.descricao || \"\").trim();\n  const valor = Number(linha.valor);\n  const tipo = String(linha.tipo || \"\").trim().toUpperCase();\n  const categoria = linha.categoria ? String(linha.categoria).trim() : null;\n  const data = linha.data ? String(linha.data).trim() : undefined;\n\n  const erros = [];\n  if (!descricao) erros.push(\"descricao vazia\");\n  if (!valor || valor <= 0) erros.push(\"valor inválido\");\n  if (![\"RECEITA\", \"DESPESA\"].includes(tipo)) erros.push(\"tipo deve ser RECEITA ou DESPESA\");\n\n  saida.push({\n    json: {\n      descricao,\n      valor,\n      tipo,\n      categoria,\n      data,\n      _valido: erros.length === 0,\n      _erros: erros.join(\", \"),\n    },\n  });\n}\n\nreturn saida;"
+      },
+      "id": "9f2c2b20-0006-4b2b-9b20-000000000006",
+      "name": "Validar e Normalizar Linhas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "d1",
+              "leftValue": "={{ $json._valido }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9f2c2b20-0007-4b2b-9b20-000000000007",
+      "name": "Linha Válida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1320, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $node[\"Configuração\"].json.api_url }}/transacoes",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Login\"].json.token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ descricao: $json.descricao, valor: $json.valor, tipo: $json.tipo, categoria: $json.categoria, data: $json.data }) }}",
+        "options": {}
+      },
+      "id": "9f2c2b20-0008-4b2b-9b20-000000000008",
+      "name": "Criar Transação",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, -80]
+    }
+  ],
+  "connections": {
+    "Executar Manualmente": {
+      "main": [[{ "node": "Configuração", "type": "main", "index": 0 }]]
+    },
+    "Configuração": {
+      "main": [[{ "node": "Login", "type": "main", "index": 0 }]]
+    },
+    "Login": {
+      "main": [[{ "node": "Ler Arquivo CSV", "type": "main", "index": 0 }]]
+    },
+    "Ler Arquivo CSV": {
+      "main": [[{ "node": "Converter CSV em Linhas", "type": "main", "index": 0 }]]
+    },
+    "Converter CSV em Linhas": {
+      "main": [[{ "node": "Validar e Normalizar Linhas", "type": "main", "index": 0 }]]
+    },
+    "Validar e Normalizar Linhas": {
+      "main": [[{ "node": "Linha Válida?", "type": "main", "index": 0 }]]
+    },
+    "Linha Válida?": {
+      "main": [
+        [{ "node": "Criar Transação", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
