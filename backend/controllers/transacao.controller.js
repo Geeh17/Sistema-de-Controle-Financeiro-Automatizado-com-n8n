@@ -1,128 +1,111 @@
 const { PrismaClient } = require("@prisma/client");
+const { asyncHandler } = require("../middlewares/asyncHandler");
+const { AppError } = require("../utils/AppError");
+const {
+  criarTransacaoSchema,
+  editarTransacaoSchema,
+  listarTransacaoQuerySchema,
+  resumoMensalQuerySchema,
+} = require("../validators/transacao.validator");
 
 const prisma = new PrismaClient();
 
 /* Criar transação */
-async function criar(req, res) {
-  const { descricao, valor, tipo, categoria, data } = req.body;
+const criar = asyncHandler(async (req, res) => {
+  const dados = criarTransacaoSchema.parse(req.body);
   const usuarioId = req.usuarioId;
 
-  if (!descricao || !valor || !tipo) {
-    return res.status(400).json({ error: "Descrição, valor e tipo são obrigatórios." });
-  }
-
-  if (!["RECEITA", "DESPESA"].includes(tipo)) {
-    return res.status(400).json({ error: "Tipo deve ser RECEITA ou DESPESA." });
-  }
-
-  if (Number(valor) <= 0) {
-    return res.status(400).json({ error: "Valor deve ser maior que zero." });
-  }
-
   const transacao = await prisma.transacao.create({
-    data: {
-      descricao,
-      valor,
-      tipo,
-      categoria: categoria || null,
-      data: data ? new Date(data) : undefined,
-      usuarioId,
-    },
+    data: { ...dados, usuarioId },
   });
 
   return res.status(201).json(transacao);
-}
+});
 
-/* Listar transações com filtros opcionais */
-async function listar(req, res) {
+/* Listar transações com filtros e paginação */
+const listar = asyncHandler(async (req, res) => {
   const usuarioId = req.usuarioId;
-  const { tipo, categoria, mes, ano } = req.query;
+  const { tipo, categoria, mes, ano, pagina, limite } = listarTransacaoQuerySchema.parse(req.query);
 
   const where = { usuarioId };
-
   if (tipo) where.tipo = tipo;
   if (categoria) where.categoria = categoria;
-
   if (mes && ano) {
-    const inicio = new Date(Number(ano), Number(mes) - 1, 1);
-    const fim = new Date(Number(ano), Number(mes), 1);
+    const inicio = new Date(ano, mes - 1, 1);
+    const fim = new Date(ano, mes, 1);
     where.data = { gte: inicio, lt: fim };
   }
 
-  const transacoes = await prisma.transacao.findMany({
-    where,
-    orderBy: { data: "desc" },
-  });
+  const [transacoes, total] = await Promise.all([
+    prisma.transacao.findMany({
+      where,
+      orderBy: { data: "desc" },
+      skip: (pagina - 1) * limite,
+      take: limite,
+    }),
+    prisma.transacao.count({ where }),
+  ]);
 
-  return res.json(transacoes);
-}
+  return res.json({
+    dados: transacoes,
+    paginacao: {
+      pagina,
+      limite,
+      total,
+      totalPaginas: Math.ceil(total / limite),
+    },
+  });
+});
 
 /* Buscar uma transação por ID */
-async function buscarPorId(req, res) {
+const buscarPorId = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const usuarioId = req.usuarioId;
-
-  const transacao = await prisma.transacao.findFirst({
-    where: { id, usuarioId },
-  });
-
-  if (!transacao) {
-    return res.status(404).json({ error: "Transação não encontrada." });
-  }
-
-  return res.json(transacao);
-}
-
-/* Editar transação */
-async function editar(req, res) {
-  const { id } = req.params;
-  const usuarioId = req.usuarioId;
-  const { descricao, valor, tipo, categoria, data } = req.body;
 
   const transacao = await prisma.transacao.findFirst({ where: { id, usuarioId } });
   if (!transacao) {
-    return res.status(404).json({ error: "Transação não encontrada." });
+    throw new AppError(404, "Transação não encontrada.");
   }
 
-  if (tipo && !["RECEITA", "DESPESA"].includes(tipo)) {
-    return res.status(400).json({ error: "Tipo deve ser RECEITA ou DESPESA." });
-  }
+  return res.json(transacao);
+});
 
-  if (valor && Number(valor) <= 0) {
-    return res.status(400).json({ error: "Valor deve ser maior que zero." });
+/* Editar transação */
+const editar = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const usuarioId = req.usuarioId;
+  const dados = editarTransacaoSchema.parse(req.body);
+
+  const transacao = await prisma.transacao.findFirst({ where: { id, usuarioId } });
+  if (!transacao) {
+    throw new AppError(404, "Transação não encontrada.");
   }
 
   const atualizada = await prisma.transacao.update({
     where: { id },
-    data: {
-      ...(descricao && { descricao }),
-      ...(valor && { valor }),
-      ...(tipo && { tipo }),
-      ...(categoria !== undefined && { categoria }),
-      ...(data && { data: new Date(data) }),
-    },
+    data: dados,
   });
 
   return res.json(atualizada);
-}
+});
 
 /* Deletar transação */
-async function deletar(req, res) {
+const deletar = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const usuarioId = req.usuarioId;
 
   const transacao = await prisma.transacao.findFirst({ where: { id, usuarioId } });
   if (!transacao) {
-    return res.status(404).json({ error: "Transação não encontrada." });
+    throw new AppError(404, "Transação não encontrada.");
   }
 
   await prisma.transacao.delete({ where: { id } });
 
   return res.status(204).send();
-}
+});
 
 /* Saldo atual */
-async function saldo(req, res) {
+const saldo = asyncHandler(async (req, res) => {
   const usuarioId = req.usuarioId;
 
   const [receitas, despesas] = await Promise.all([
@@ -144,19 +127,15 @@ async function saldo(req, res) {
     totalReceitas,
     totalDespesas,
   });
-}
+});
 
 /* Resumo mensal */
-async function resumoMensal(req, res) {
+const resumoMensal = asyncHandler(async (req, res) => {
   const usuarioId = req.usuarioId;
-  const { mes, ano } = req.query;
+  const { mes, ano } = resumoMensalQuerySchema.parse(req.query);
 
-  if (!mes || !ano) {
-    return res.status(400).json({ error: "Informe mes e ano como query params." });
-  }
-
-  const inicio = new Date(Number(ano), Number(mes) - 1, 1);
-  const fim = new Date(Number(ano), Number(mes), 1);
+  const inicio = new Date(ano, mes - 1, 1);
+  const fim = new Date(ano, mes, 1);
 
   const [receitas, despesas, transacoes] = await Promise.all([
     prisma.transacao.aggregate({
@@ -176,7 +155,6 @@ async function resumoMensal(req, res) {
   const totalReceitas = Number(receitas._sum.valor) || 0;
   const totalDespesas = Number(despesas._sum.valor) || 0;
 
-  /* Agrupamento por categoria */
   const porCategoria = transacoes.reduce((acc, t) => {
     const cat = t.categoria || "Sem categoria";
     if (!acc[cat]) acc[cat] = { receitas: 0, despesas: 0 };
@@ -186,14 +164,14 @@ async function resumoMensal(req, res) {
   }, {});
 
   return res.json({
-    mes: Number(mes),
-    ano: Number(ano),
+    mes,
+    ano,
     totalReceitas,
     totalDespesas,
     saldo: totalReceitas - totalDespesas,
     porCategoria,
     transacoes,
   });
-}
+});
 
 module.exports = { criar, listar, buscarPorId, editar, deletar, saldo, resumoMensal };

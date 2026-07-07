@@ -8,8 +8,12 @@ const {
   saldo,
   resumoMensal,
 } = require("../controllers/transacao.controller");
+const { autenticar } = require("../middlewares/auth.middleware");
 
 const router = Router();
+
+// Todas as rotas de transação exigem usuário autenticado
+router.use(autenticar);
 
 router.post("/", criar);
 router.get("/", listar);

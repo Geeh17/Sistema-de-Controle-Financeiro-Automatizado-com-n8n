@@ -1,22 +1,22 @@
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { asyncHandler } = require("../middlewares/asyncHandler");
+const { AppError } = require("../utils/AppError");
+const { registrarSchema, loginSchema } = require("../validators/auth.validator");
 
 const prisma = new PrismaClient();
+const SALT_ROUNDS = 10;
 
-async function registrar(req, res) {
-  const { nome, email, senha } = req.body;
-
-  if (!nome || !email || !senha) {
-    return res.status(400).json({ error: "Nome, email e senha são obrigatórios." });
-  }
+const registrar = asyncHandler(async (req, res) => {
+  const { nome, email, senha } = registrarSchema.parse(req.body);
 
   const emailExistente = await prisma.usuario.findUnique({ where: { email } });
   if (emailExistente) {
-    return res.status(409).json({ error: "Email já cadastrado." });
+    throw new AppError(409, "Email já cadastrado.");
   }
 
-  const senhaHash = await bcrypt.hash(senha, 10);
+  const senhaHash = await bcrypt.hash(senha, SALT_ROUNDS);
 
   const usuario = await prisma.usuario.create({
     data: { nome, email, senha: senhaHash },
@@ -24,33 +24,29 @@ async function registrar(req, res) {
   });
 
   return res.status(201).json(usuario);
-}
+});
 
-async function login(req, res) {
-  const { email, senha } = req.body;
-
-  if (!email || !senha) {
-    return res.status(400).json({ error: "Email e senha são obrigatórios." });
-  }
+const login = asyncHandler(async (req, res) => {
+  const { email, senha } = loginSchema.parse(req.body);
 
   const usuario = await prisma.usuario.findUnique({ where: { email } });
   if (!usuario) {
-    return res.status(401).json({ error: "Credenciais inválidas." });
+    throw new AppError(401, "Credenciais inválidas.");
   }
 
   const senhaValida = await bcrypt.compare(senha, usuario.senha);
   if (!senhaValida) {
-    return res.status(401).json({ error: "Credenciais inválidas." });
+    throw new AppError(401, "Credenciais inválidas.");
   }
 
   const token = jwt.sign({ id: usuario.id }, process.env.JWT_SECRET, {
-    expiresIn: "7d",
+    expiresIn: process.env.JWT_EXPIRES_IN || "7d",
   });
 
   return res.json({
     token,
     usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email },
   });
-}
+});
 
 module.exports = { registrar, login };

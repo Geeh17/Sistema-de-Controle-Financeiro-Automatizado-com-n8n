@@ -1,71 +1,49 @@
 require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
-const { PrismaClient } = require("@prisma/client");
+const helmet = require("helmet");
+const morgan = require("morgan");
+
+const { loadEnv } = require("./config/env");
+const authRoutes = require("./routes/auth.routes");
+const transacaoRoutes = require("./routes/transacao.routes");
+const { apiLimiter } = require("./middlewares/rateLimit.middleware");
+const { errorHandler } = require("./middlewares/error.middleware");
+
+// Valida as variáveis de ambiente antes de qualquer outra coisa.
+// Se algo essencial faltar (ex: JWT_SECRET), o processo para aqui
+// com uma mensagem clara, em vez de falhar de forma confusa depois.
+const env = loadEnv();
 
 const app = express();
-const prisma = new PrismaClient();
 
-app.use(cors());
+app.use(helmet());
+app.use(
+  cors({
+    origin: env.CORS_ORIGIN.split(",").map((o) => o.trim()),
+    credentials: true,
+  }),
+);
 app.use(express.json());
+app.use(morgan(env.NODE_ENV === "production" ? "combined" : "dev"));
+app.use(apiLimiter);
 
-/* Criar transação */
-app.post("/transacoes", async (req, res) => {
-  try {
-    const { descricao, valor, tipo, usuarioId } = req.body;
-
-    const transacao = await prisma.transacao.create({
-      data: {
-        descricao,
-        valor,
-        tipo,
-        usuarioId,
-      },
-    });
-
-    res.json(transacao);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-/* Listar transações */
-app.get("/transacoes/:usuarioId", async (req, res) => {
-  try {
-    const { usuarioId } = req.params;
+app.use("/auth", authRoutes);
+app.use("/transacoes", transacaoRoutes);
 
-    const transacoes = await prisma.transacao.findMany({
-      where: { usuarioId },
-      orderBy: { data: "desc" },
-    });
-
-    res.json(transacoes);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+// 404 para rotas não encontradas
+app.use((req, res) => {
+  res.status(404).json({ error: "Rota não encontrada." });
 });
 
-/* Saldo */
-app.get("/saldo/:usuarioId", async (req, res) => {
-  try {
-    const { usuarioId } = req.params;
+// Middleware de erro deve ser o último a ser registrado
+app.use(errorHandler);
 
-    const receitas = await prisma.transacao.aggregate({
-      where: { usuarioId, tipo: "RECEITA" },
-      _sum: { valor: true },
-    });
-
-    const despesas = await prisma.transacao.aggregate({
-      where: { usuarioId, tipo: "DESPESA" },
-      _sum: { valor: true },
-    });
-
-    const saldo = (receitas._sum.valor || 0) - (despesas._sum.valor || 0);
-
-    res.json({ saldo });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+app.listen(env.PORT, () => {
+  console.log(`API rodando na porta ${env.PORT} [${env.NODE_ENV}]`);
 });
-
-app.listen(3000, () => console.log("🔥 API rodando na porta 3000"));
